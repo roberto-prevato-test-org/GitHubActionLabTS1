@@ -16,7 +16,7 @@ function getPullRequestId(): string {
 
 async function run(): Promise<void> {
   try {
-
+    /*
     const ms: string = core.getInput('milliseconds')
     core.debug(`Waiting ${ms} milliseconds ...`)
 
@@ -25,13 +25,13 @@ async function run(): Promise<void> {
     core.debug(new Date().toTimeString())
 
     core.setOutput('time', new Date().toTimeString())
+    */
 
     console.log(JSON.stringify(context, null, 4))
 
     const myToken = core.getInput('myToken');
 
     const octokit = new GitHub(myToken);
-    console.log(octokit);
 
     // TODO: make a request to get all commits associated with the PR (?)
     const pullRequestId = getPullRequestId();
