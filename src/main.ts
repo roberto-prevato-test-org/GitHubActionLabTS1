@@ -1,11 +1,12 @@
 import * as core from '@actions/core'
-import {context, GitHub} from '@actions/github'
+import { context, GitHub } from '@actions/github'
+import { PullsGetResponseLabelsItem } from '@octokit/rest';
 
 
 class NotAPullRequestError extends Error {
   constructor() {
-      super('Missing pull request data in the context object. ' +
-            'This action must be used with a PR.');
+    super('Missing pull request data in the context object. ' +
+      'This action must be used with a PR.');
   }
 }
 
@@ -30,6 +31,32 @@ function getIssuesIdsFromCommitMessage(message: string): (string[] | null) {
 }
 
 
+async function getPullRequestLabels(
+  octokit: GitHub,
+  owner: string,
+  repo: string,
+  pull_number: number
+): Promise<PullsGetResponseLabelsItem[]> {
+  const response = await octokit.pulls.get({
+    owner,
+    repo,
+    pull_number
+  });
+
+  return response.data.labels
+}
+
+
+function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
+  labels.forEach(label => {
+    if (label.name == "skip-issue") {
+      return true;
+    }
+  })
+  return false;
+}
+
+
 async function run(): Promise<void> {
   try {
     console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
@@ -45,41 +72,50 @@ async function run(): Promise<void> {
       throw new NotAPullRequestError();
     }
 
+    // get the PR labels
+    const labels = await getPullRequestLabels(octokit, owner, repository, pullRequest.number);
+
+    if (skipValidation(labels)) {
+      console.log("Commit messages validation skipped by label (skip-issue)");
+      return;
+    }
+
+
     try {
-    // NB: paginate fetches all commits for the PR, so it handles
-    // the unlikely situation of a PR with more than 250 commits
-    await octokit
-      .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
-      {
-        owner: owner,
-        repo: repository,
-        pull_number: pullRequest.number
-      }).then(commits => {
+      // NB: paginate fetches all commits for the PR, so it handles
+      // the unlikely situation of a PR with more than 250 commits
+      await octokit
+        .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
+          {
+            owner: owner,
+            repo: repository,
+            pull_number: pullRequest.number
+          }).then(commits => {
 
-        // console.log('0: -------------------------------------------');
-        // console.log('1: commits response');
-        // console.log(JSON.stringify(commits, null, 2));
+            // console.log('0: -------------------------------------------');
+            // console.log('1: commits response');
+            // console.log(JSON.stringify(commits, null, 2));
 
-        // NB: funny return payload; a list of commits are items with commit property
-        commits.forEach(item => {
-          const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
+            // NB: funny return payload; a list of commits are items with commit property
+            commits.forEach(item => {
+              const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
 
-          if (!issuesIds) {
-            console.error(`Commit ${item.sha} with message "${item.commit.message}"
+              if (!issuesIds) {
+                console.error(`Commit ${item.sha} with message "${item.commit.message}"
             does not refer any issue.
             `)
-          } else {
-            console.info(`ids: ${issuesIds}`)
-          }
-        });
+              } else {
+                console.info(`ids: ${issuesIds}`)
+              }
+            });
 
-      })
+          })
     } catch (error) {
       console.log(`Method 0 does not work, fail with message: ${error.message}`)
     }
 
     // TODO: get all commits that do not reference any issue
-    // TODO:
+    // TODO: download issues and check their ids
 
     /*
     try {

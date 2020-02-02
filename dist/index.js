@@ -3499,6 +3499,24 @@ function getIssuesIdsFromCommitMessage(message) {
         return null;
     return match;
 }
+function getPullRequestLabels(octokit, owner, repo, pull_number) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const response = yield octokit.pulls.get({
+            owner,
+            repo,
+            pull_number
+        });
+        return response.data.labels;
+    });
+}
+function skipValidation(labels) {
+    labels.forEach(label => {
+        if (label.name == "skip-issue") {
+            return true;
+        }
+    });
+    return false;
+}
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -3510,6 +3528,12 @@ function run() {
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
                 throw new NotAPullRequestError();
+            }
+            // get the PR labels
+            const labels = yield getPullRequestLabels(octokit, owner, repository, pullRequest.number);
+            if (skipValidation(labels)) {
+                console.log("Commit messages validation skipped by label (skip-issue)");
+                return;
             }
             try {
                 // NB: paginate fetches all commits for the PR, so it handles
@@ -3541,7 +3565,7 @@ function run() {
                 console.log(`Method 0 does not work, fail with message: ${error.message}`);
             }
             // TODO: get all commits that do not reference any issue
-            // TODO:
+            // TODO: download issues and check their ids
             /*
             try {
                 // NB: the following method would return only 250 commits
