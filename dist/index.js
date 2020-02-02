@@ -3510,11 +3510,12 @@ function getPullRequestLabels(octokit, owner, repo, pull_number) {
     });
 }
 function skipValidation(labels) {
-    labels.forEach(label => {
+    for (var i = 0; i++; i < labels.length) {
+        let label = labels[i];
         if (label.name == "skip-issue") {
             return true;
         }
-    });
+    }
     return false;
 }
 function run() {
