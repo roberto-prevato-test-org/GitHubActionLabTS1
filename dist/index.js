@@ -3545,8 +3545,8 @@ function run() {
                     repo: repository,
                     ref: pr_commit_sha
                 });
-                // console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
-                // console.log('\n\n\n\n\n')
+                console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
+                console.log('\n\n\n\n\n');
                 console.log('Forcing a re-check of previous checks');
                 for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
                     let checkSuite = all_check_suites.data.check_suites[0];
@@ -3595,37 +3595,6 @@ function run() {
             catch (error) {
                 console.log(`Method 0 does not work, fail with message: ${error.message}`);
             }
-            // TODO: get all commits that do not reference any issue
-            // TODO: download issues and check their ids
-            /*
-            try {
-                // NB: the following method would return only 250 commits
-              const commitsResponse = await octokit.pulls.listCommits({
-                owner: owner,
-                repo: repository,
-                pull_number: pullRequest.number
-              });
-              console.log('1: -------------------------------------------');
-              console.log(JSON.stringify(commitsResponse, null, 2));
-            } catch (error) {
-              console.log(`Method 1 does not work, fail with message: ${error.message}`)
-            }
-        
-            try {
-              const response = await octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits',
-              {
-                owner,
-                repo: repository,
-                pull_number: pullRequest.number
-              });
-              const data = response.data;
-              console.log('2: -------------------------------------------');
-              console.log(JSON.stringify(data, null, 2));
-              // const messages = commits.map(item => item.commit.message);
-            } catch (error) {
-              console.log(`Method 2 does not work, fail with message: ${error.message}`)
-            }
-            */
         }
         catch (error) {
             core.setFailed(error.message);
