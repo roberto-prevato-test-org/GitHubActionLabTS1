@@ -3518,6 +3518,9 @@ function run() {
                     repo: repository,
                     pull_number: pullRequest.number
                 }).then(commits => {
+                    console.log('0: -------------------------------------------');
+                    console.log('1: commits response');
+                    console.log(JSON.stringify(commits, null, 2));
                     commits.forEach(item => {
                         const issuesIds = getIssuesIdsFromCommitMessage(item.message);
                         if (!issuesIds) {
