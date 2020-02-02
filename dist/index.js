@@ -3523,9 +3523,10 @@ function shouldTriggerPreviousChecks(payload) {
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
+        let anyMissing = false;
         try {
-            console.log(`The context: ${JSON.stringify(github_1.context, undefined, 2)}`);
-            console.log('\n\n\n\n\n');
+            // console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
+            // console.log('\n\n\n\n\n')
             const octokit = new github_1.GitHub(core.getInput('myToken'));
             const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.login; }, 'owner');
             const repository = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
@@ -3544,8 +3545,8 @@ function run() {
                     repo: repository,
                     ref: pr_commit_sha
                 });
-                console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
-                console.log('\n\n\n\n\n');
+                // console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
+                // console.log('\n\n\n\n\n')
                 console.log('Forcing a re-check of previous checks');
                 for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
                     let checkSuite = all_check_suites.data.check_suites[0];
@@ -3580,6 +3581,7 @@ function run() {
                     commits.forEach(item => {
                         const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
                         if (!issuesIds) {
+                            anyMissing = true;
                             console.error(`Commit ${item.sha} with message "${item.commit.message}"
             does not refer any issue.
             `);
@@ -3628,7 +3630,9 @@ function run() {
         catch (error) {
             core.setFailed(error.message);
         }
-        core.setFailed("Forced failure");
+        if (anyMissing) {
+            core.setFailed("Some commit messages do not refer any issue.");
+        }
     });
 }
 run();

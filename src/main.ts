@@ -65,9 +65,11 @@ function shouldTriggerPreviousChecks(payload: WebhookPayload): boolean {
 
 
 async function run(): Promise<void> {
+  let anyMissing = false;
+
   try {
-    console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
-    console.log('\n\n\n\n\n')
+    // console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
+    // console.log('\n\n\n\n\n')
 
     const octokit = new GitHub(core.getInput('myToken'));
     const owner = requireValue(() => context.payload.repository?.owner?.login, 'owner');
@@ -93,8 +95,8 @@ async function run(): Promise<void> {
         ref: pr_commit_sha
       })
 
-      console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
-      console.log('\n\n\n\n\n')
+      // console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
+      // console.log('\n\n\n\n\n')
 
       console.log('Forcing a re-check of previous checks');
 
@@ -118,7 +120,6 @@ async function run(): Promise<void> {
       return;
     }
 
-
     try {
       // NB: paginate fetches all commits for the PR, so it handles
       // the unlikely situation of a PR with more than 250 commits
@@ -139,6 +140,7 @@ async function run(): Promise<void> {
               const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
 
               if (!issuesIds) {
+                anyMissing = true;
                 console.error(`Commit ${item.sha} with message "${item.commit.message}"
             does not refer any issue.
             `)
@@ -188,7 +190,9 @@ async function run(): Promise<void> {
     core.setFailed(error.message)
   }
 
-  core.setFailed("Forced failure")
+  if (anyMissing) {
+    core.setFailed("Some commit messages do not refer any issue.")
+  }
 }
 
 run()
