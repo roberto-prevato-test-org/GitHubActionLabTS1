@@ -57,13 +57,16 @@ async function run(): Promise<void> {
         console.log('1: commits response');
         console.log(JSON.stringify(commits, null, 2));
 
+        // NB: funny return payload; a list of commits are items with commit property
         commits.forEach(item => {
-          const issuesIds = getIssuesIdsFromCommitMessage(item.message);
+          const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
 
           if (!issuesIds) {
-            console.error(`Commit ${item.sha} with message "${item.message}"
+            console.error(`Commit ${item.sha} with message "${item.commit.message}"
             does not refer any issue.
             `)
+          } else {
+            console.info(`ids: ${issuesIds}`)
           }
         });
 
@@ -102,6 +105,8 @@ async function run(): Promise<void> {
   } catch (error) {
     core.setFailed(error.message)
   }
+
+  core.setFailed("Forced failure")
 }
 
 run()
