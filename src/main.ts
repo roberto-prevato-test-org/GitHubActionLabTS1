@@ -58,8 +58,8 @@ async function runAllChecks(
   suites: ChecksListSuitesForRefResponse
 ): Promise<void> {
 
-  console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
-  console.log('\n\n\n\n\n')
+  // console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
+  // console.log('\n\n\n\n\n')
 
   for (var i = 0; i < suites.check_suites.length; i++) {
     let checkSuite = suites.check_suites[i];
