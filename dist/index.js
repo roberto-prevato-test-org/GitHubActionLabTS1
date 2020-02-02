@@ -3539,21 +3539,20 @@ function run() {
                 // previously failed checks
                 const pr_commit_sha = requireValue(() => { var _a; return (_a = github_1.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.head.sha; }, 'pr_head_sha');
                 // Test: get all check suites
-                const all_check_suites = yield octokit.request('GET /repos/:owner/:repo/commits/:ref/check-suites', {
+                const all_check_suites = yield octokit.checks.listSuitesForRef({
                     owner,
                     repo: repository,
-                    ref: pr_commit_sha,
-                    mediaType: {
-                        previews: ['antiope']
-                    }
+                    ref: pr_commit_sha
                 });
                 console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
                 console.log('\n\n\n\n\n');
+                // TODO: get the right check suite
+                const last_check_suite = all_check_suites.data.check_suites[0].id;
                 console.log('Forcing a re-check of previous checks');
-                yield octokit.request('POST /repos/:owner/:repo/check-suites/:check_suite_id/rerequest', {
+                yield octokit.checks.rerequestSuite({
                     owner,
                     repo: repository,
-                    check_suite_id: pr_commit_sha
+                    check_suite_id: last_check_suite
                 });
                 return;
             }
