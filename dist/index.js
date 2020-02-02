@@ -3523,7 +3523,6 @@ function shouldTriggerPreviousChecks(payload) {
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
-        var anyMissing = false;
         try {
             // console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
             // console.log('\n\n\n\n\n')
@@ -3565,42 +3564,37 @@ function run() {
                 console.log("Commit messages validation skipped by label (skip-issue)");
                 return;
             }
-            try {
-                // NB: paginate fetches all commits for the PR, so it handles
-                // the unlikely situation of a PR with more than 250 commits
-                yield octokit
-                    .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
-                    owner: owner,
-                    repo: repository,
-                    pull_number: pullRequest.number
-                }).then(commits => {
-                    // console.log('0: -------------------------------------------');
-                    // console.log('1: commits response');
-                    // console.log(JSON.stringify(commits, null, 2));
-                    // NB: funny return payload; a list of commits are items with commit property
-                    commits.forEach(item => {
-                        const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
-                        if (!issuesIds) {
-                            anyMissing = true;
-                            console.error(`Commit ${item.sha} with message "${item.commit.message}"
-            does not refer any issue.
-            `);
-                        }
-                        else {
-                            console.info(`ids: ${issuesIds}`);
-                        }
-                    });
+            // NB: paginate fetches all commits for the PR, so it handles
+            // the unlikely situation of a PR with more than 250 commits
+            yield octokit
+                .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+                owner: owner,
+                repo: repository,
+                pull_number: pullRequest.number
+            }).then(commits => {
+                // console.log('0: -------------------------------------------');
+                // console.log('1: commits response');
+                // console.log(JSON.stringify(commits, null, 2));
+                // NB: funny return payload; a list of commits are items with commit property
+                var anyMissing = false;
+                commits.forEach(item => {
+                    const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
+                    if (!issuesIds) {
+                        anyMissing = true;
+                        console.error(`Commit ${item.sha} with message "${item.commit.message}"
+                           does not refer any issue.`);
+                    }
+                    else {
+                        console.info(`ids: ${issuesIds}`);
+                    }
                 });
-            }
-            catch (error) {
-                console.log(`Method 0 does not work, fail with message: ${error.message}`);
-            }
+                if (anyMissing) {
+                    throw new Error("One or more commit messages don't refer any issue.");
+                }
+            });
         }
         catch (error) {
             core.setFailed(error.message);
-        }
-        if (anyMissing) {
-            core.setFailed("Some commit messages do not refer any issue.");
         }
     });
 }
