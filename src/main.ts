@@ -32,6 +32,9 @@ function getIssuesIdsFromCommitMessage(message: string): (string[] | null) {
 
 async function run(): Promise<void> {
   try {
+    console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
+    console.log('\n\n\n\n\n')
+
     const octokit = new GitHub(core.getInput('myToken'));
     const owner = requireValue(() => context.payload.repository?.owner?.login, 'owner');
     const repository = requireValue(() => context.payload.repository?.name, 'repository');
@@ -43,8 +46,8 @@ async function run(): Promise<void> {
     }
 
     try {
-    // NOTA BENE: the following fails with message
-    // "##[error]fatal: couldn't find remote ref refs/pull/1/merge"
+    // NB: paginate fetches all commits for the PR, so it handles
+    // the unlikely situation of a PR with more than 250 commits
     await octokit
       .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
       {
@@ -75,33 +78,38 @@ async function run(): Promise<void> {
       console.log(`Method 0 does not work, fail with message: ${error.message}`)
     }
 
-    try {
-    // NB: the following method would return only 250 commits
-    const commitsResponse = await octokit.pulls.listCommits({
-      owner: owner,
-      repo: repository,
-      pull_number: pullRequest.number
-    });
-    console.log('1: -------------------------------------------');
-    console.log(JSON.stringify(commitsResponse, null, 2));
-  } catch (error) {
-    console.log(`Method 1 does not work, fail with message: ${error.message}`)
-  }
+    // TODO: get all commits that do not reference any issue
+    // TODO:
 
-  try {
-    const response = await octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits',
-    {
-      owner,
-      repo: repository,
-      pull_number: pullRequest.number
-    });
-    const data = response.data;
-    console.log('2: -------------------------------------------');
-    console.log(JSON.stringify(data, null, 2));
-    // const messages = commits.map(item => item.commit.message);
-  } catch (error) {
-    console.log(`Method 2 does not work, fail with message: ${error.message}`)
-  }
+    /*
+    try {
+        // NB: the following method would return only 250 commits
+      const commitsResponse = await octokit.pulls.listCommits({
+        owner: owner,
+        repo: repository,
+        pull_number: pullRequest.number
+      });
+      console.log('1: -------------------------------------------');
+      console.log(JSON.stringify(commitsResponse, null, 2));
+    } catch (error) {
+      console.log(`Method 1 does not work, fail with message: ${error.message}`)
+    }
+
+    try {
+      const response = await octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits',
+      {
+        owner,
+        repo: repository,
+        pull_number: pullRequest.number
+      });
+      const data = response.data;
+      console.log('2: -------------------------------------------');
+      console.log(JSON.stringify(data, null, 2));
+      // const messages = commits.map(item => item.commit.message);
+    } catch (error) {
+      console.log(`Method 2 does not work, fail with message: ${error.message}`)
+    }
+    */
   } catch (error) {
     core.setFailed(error.message)
   }
