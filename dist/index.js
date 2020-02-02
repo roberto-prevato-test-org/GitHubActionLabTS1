@@ -3548,7 +3548,7 @@ function run() {
                 console.log('\n\n\n\n\n');
                 console.log('Forcing a re-check of previous checks');
                 for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
-                    let checkSuite = all_check_suites.data.check_suites[0];
+                    let checkSuite = all_check_suites.data.check_suites[i];
                     //if (checkSuite.status == 'completed') {
                     try {
                         yield octokit.checks.rerequestSuite({
