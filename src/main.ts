@@ -1,44 +1,72 @@
 import * as core from '@actions/core'
 import {context, GitHub} from '@actions/github'
-import {wait} from './wait'
 
 
-function getPullRequestId(): string {
-  const pullRequestId = process.env.GITHUB_REF;
+class NotAPullRequestError extends Error {
+  constructor() {
+      super('Missing pull request data in the context object. ' +
+            'This action must be used with a PR.');
+  }
+}
 
-  if (!pullRequestId)
-    throw new Error("Action was not triggered by a PR. " +
-                    "Use this action with PR triggers.");
 
-  return pullRequestId;
+function requireValue(callback: () => (string | undefined)): string {
+  const value = callback();
+  if (!value)
+    throw new Error("Missing value");
+  return value;
+}
+
+
+function getIssuesIdsFromCommitMessage(message: string): (string[] | null) {
+  if (message.indexOf('#') == -1)
+    return null;
+
+  const match = message.match(/(#\d+)/g);
+
+  if (!match)
+    return null;
+  return match;
 }
 
 
 async function run(): Promise<void> {
   try {
-    /*
-    const ms: string = core.getInput('milliseconds')
-    core.debug(`Waiting ${ms} milliseconds ...`)
+    const octokit = new GitHub(core.getInput('myToken'));
+    const owner = requireValue(() => context.payload.owner?.name);
+    const repository = requireValue(() => context.payload.repository?.name);
 
-    core.debug(new Date().toTimeString())
-    await wait(parseInt(ms, 10))
-    core.debug(new Date().toTimeString())
+    const pullRequest = context.payload.pull_request;
 
-    core.setOutput('time', new Date().toTimeString())
-    */
+    if (!pullRequest) {
+      throw new NotAPullRequestError();
+    }
 
-    console.log(JSON.stringify(context, null, 4))
+    await octokit
+      .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
+      {
+        owner: owner,
+        repo: repository,
+        pull_number: pullRequest.number
+      }).then(commits => {
 
-    const myToken = core.getInput('myToken');
+        commits.forEach(item => {
+          const issuesIds = getIssuesIdsFromCommitMessage(item.message);
 
-    const octokit = new GitHub(myToken);
+          if (!issuesIds) {
+            console.error(`Commit ${item.sha} with message "${item.message}"
+            does not refer any issue.
+            `)
+          }
+        });
 
-    // TODO: make a request to get all commits associated with the PR (?)
-    const pullRequestId = getPullRequestId();
-    console.log(`PR: ${pullRequestId}`);
+      })
 
-    const payload = JSON.stringify(context.payload, undefined, 2)
-    console.log(`The event payload: ${payload}`);
+    // NB: the following method would return only 250 commits
+    // const commitsResponse = await octokit.pulls.listCommits();
+
+
+    // const messages = commits.map(item => item.commit.message);
 
   } catch (error) {
     core.setFailed(error.message)

@@ -3479,34 +3479,54 @@ var __importStar = (this && this.__importStar) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const core = __importStar(__webpack_require__(470));
 const github_1 = __webpack_require__(469);
-function getPullRequestId() {
-    const pullRequestId = process.env.GITHUB_REF;
-    if (!pullRequestId)
-        throw new Error("Action was not triggered by a PR. " +
-            "Use this action with PR triggers.");
-    return pullRequestId;
+class NotAPullRequestError extends Error {
+    constructor() {
+        super('Missing pull request data in the context object. ' +
+            'This action must be used with a PR.');
+    }
+}
+function requireValue(callback) {
+    const value = callback();
+    if (!value)
+        throw new Error("Missing value");
+    return value;
+}
+function getIssuesIdsFromCommitMessage(message) {
+    if (message.indexOf('#') == -1)
+        return null;
+    const match = message.match(/(#\d+)/g);
+    if (!match)
+        return null;
+    return match;
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            /*
-            const ms: string = core.getInput('milliseconds')
-            core.debug(`Waiting ${ms} milliseconds ...`)
-        
-            core.debug(new Date().toTimeString())
-            await wait(parseInt(ms, 10))
-            core.debug(new Date().toTimeString())
-        
-            core.setOutput('time', new Date().toTimeString())
-            */
-            console.log(JSON.stringify(github_1.context, null, 4));
-            const myToken = core.getInput('myToken');
-            const octokit = new github_1.GitHub(myToken);
-            // TODO: make a request to get all commits associated with the PR (?)
-            const pullRequestId = getPullRequestId();
-            console.log(`PR: ${pullRequestId}`);
-            const payload = JSON.stringify(github_1.context.payload, undefined, 2);
-            console.log(`The event payload: ${payload}`);
+            const octokit = new github_1.GitHub(core.getInput('myToken'));
+            const owner = requireValue(() => { var _a; return (_a = github_1.context.payload.owner) === null || _a === void 0 ? void 0 : _a.name; });
+            const repository = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; });
+            const pullRequest = github_1.context.payload.pull_request;
+            if (!pullRequest) {
+                throw new NotAPullRequestError();
+            }
+            yield octokit
+                .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+                owner: owner,
+                repo: repository,
+                pull_number: pullRequest.number
+            }).then(commits => {
+                commits.forEach(item => {
+                    const issuesIds = getIssuesIdsFromCommitMessage(item.message);
+                    if (!issuesIds) {
+                        console.error(`Commit ${item.sha} with message "${item.message}"
+            does not refer any issue.
+            `);
+                    }
+                });
+            });
+            // NB: the following method would return only 250 commits
+            // const commitsResponse = await octokit.pulls.listCommits();
+            // const messages = commits.map(item => item.commit.message);
         }
         catch (error) {
             core.setFailed(error.message);
