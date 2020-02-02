@@ -3558,7 +3558,7 @@ function run() {
                         });
                     }
                     catch (error) {
-                        console.log(`Failed to run check suite: ${error.message}`);
+                        console.log(`Failed to run check suite ${checkSuite.id}: ${error.message}`);
                     }
                 }
                 return;
@@ -3575,13 +3575,9 @@ function run() {
                 owner: owner,
                 repo: repository,
                 pull_number: pullRequest.number
-            }).then(commits => {
-                // console.log('0: -------------------------------------------');
-                // console.log('1: commits response');
-                // console.log(JSON.stringify(commits, null, 2));
-                // NB: funny return payload; a list of commits are items with commit property
+            }).then(items => {
                 var anyMissing = false;
-                commits.forEach(item => {
+                items.forEach(item => {
                     const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
                     if (!issuesIds) {
                         anyMissing = true;
