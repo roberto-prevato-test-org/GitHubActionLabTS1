@@ -84,7 +84,7 @@ async function run(): Promise<void> {
       // since GitHub creates a new check, pass this one and force a re-check of
       // previously failed checks
       const pr_commit_sha = requireValue(() => context.payload.pull_request?.head.sha,
-                                         'pr_head_sha');
+        'pr_head_sha');
 
       // Test: get all check suites
       const all_check_suites = await octokit.checks.listSuitesForRef({
@@ -100,12 +100,15 @@ async function run(): Promise<void> {
 
       for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
         let checkSuite = all_check_suites.data.check_suites[0];
-        if (checkSuite.status == 'completed') {
+        //if (checkSuite.status == 'completed') {
+        try {
           await octokit.checks.rerequestSuite({
             owner,
             repo: repository,
             check_suite_id: checkSuite.id
           })
+        } catch (error) {
+          console.log(`Failed to run check suite: ${error.message}`);
         }
       }
       return;

@@ -3549,12 +3549,16 @@ function run() {
                 console.log('Forcing a re-check of previous checks');
                 for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
                     let checkSuite = all_check_suites.data.check_suites[0];
-                    if (checkSuite.status == 'completed') {
+                    //if (checkSuite.status == 'completed') {
+                    try {
                         yield octokit.checks.rerequestSuite({
                             owner,
                             repo: repository,
                             check_suite_id: checkSuite.id
                         });
+                    }
+                    catch (error) {
+                        console.log(`Failed to run check suite: ${error.message}`);
                     }
                 }
                 return;
