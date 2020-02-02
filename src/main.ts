@@ -33,7 +33,7 @@ function getIssuesIdsFromCommitMessage(message: string): (string[] | null) {
 async function run(): Promise<void> {
   try {
     const octokit = new GitHub(core.getInput('myToken'));
-    const owner = requireValue(() => context.payload.repository?.owner?.name, 'owner');
+    const owner = requireValue(() => context.payload.repository?.owner?.login, 'owner');
     const repository = requireValue(() => context.payload.repository?.name, 'repository');
 
     const pullRequest = context.payload.pull_request;

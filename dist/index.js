@@ -3503,7 +3503,7 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const octokit = new github_1.GitHub(core.getInput('myToken'));
-            const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.name; }, 'owner');
+            const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.login; }, 'owner');
             const repository = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
