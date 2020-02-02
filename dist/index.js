@@ -3540,9 +3540,11 @@ function run() {
                 const pr_commit_sha = requireValue(() => { var _a; return (_a = github_1.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.head.sha; }, 'pr_head_sha');
                 // Test: get all check suites
                 const all_check_suites = yield octokit.request('GET /repos/:owner/:repo/commits/:ref/check-suites', {
-                    owner,
-                    repo: repository,
-                    ref: pr_commit_sha,
+                    data: {
+                        owner,
+                        repo: repository,
+                        ref: pr_commit_sha,
+                    },
                     headers: {
                         accept: 'application/vnd.github.antiope-preview+json'
                     }
