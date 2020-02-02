@@ -3509,6 +3509,25 @@ function getPullRequestLabels(octokit, owner, repo, pull_number) {
         return response.data.labels;
     });
 }
+function runAllChecks(octokit, owner, repo, suites) {
+    return __awaiter(this, void 0, void 0, function* () {
+        console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
+        console.log('\n\n\n\n\n');
+        for (var i = 0; i < suites.check_suites.length; i++) {
+            let checkSuite = suites.check_suites[i];
+            try {
+                yield octokit.checks.rerequestSuite({
+                    owner,
+                    repo,
+                    check_suite_id: checkSuite.id
+                });
+            }
+            catch (error) {
+                console.log(`Failed to run check suite ${checkSuite.id}: ${error.message}`);
+            }
+        }
+    });
+}
 function skipValidation(labels) {
     for (var i = 0; i < labels.length; i++) {
         let label = labels[i];
@@ -3518,52 +3537,40 @@ function skipValidation(labels) {
     }
     return false;
 }
-function shouldTriggerPreviousChecks(payload) {
+function isChangeOfLabel(payload) {
     return payload.action == 'labeled' || payload.action == 'unlabeled';
+}
+function handleChangeOfLabel(octokit, owner, repo) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const ref = requireValue(() => { var _a; return (_a = github_1.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.head.sha; }, 'pr_head_sha');
+        const suitesForRef = yield octokit.checks.listSuitesForRef({
+            owner,
+            repo,
+            ref
+        });
+        console.log('Forcing a re-check of previous checks');
+        yield runAllChecks(octokit, owner, repo, suitesForRef.data);
+        return;
+    });
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            // console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
-            // console.log('\n\n\n\n\n')
             const octokit = new github_1.GitHub(core.getInput('myToken'));
             const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.login; }, 'owner');
-            const repository = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
+            const repo = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
                 throw new NotAPullRequestError();
             }
-            if (shouldTriggerPreviousChecks(github_1.context.payload)) {
+            if (isChangeOfLabel(github_1.context.payload)) {
                 // this action is fired when a PR labels change;
                 // since GitHub creates a new check, pass this one and force a re-check of
                 // previously failed checks
-                const pr_commit_sha = requireValue(() => { var _a; return (_a = github_1.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.head.sha; }, 'pr_head_sha');
-                // Test: get all check suites
-                const all_check_suites = yield octokit.checks.listSuitesForRef({
-                    owner,
-                    repo: repository,
-                    ref: pr_commit_sha
-                });
-                console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
-                console.log('\n\n\n\n\n');
-                console.log('Forcing a re-check of previous checks');
-                for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
-                    let checkSuite = all_check_suites.data.check_suites[i];
-                    //if (checkSuite.status == 'completed') {
-                    try {
-                        yield octokit.checks.rerequestSuite({
-                            owner,
-                            repo: repository,
-                            check_suite_id: checkSuite.id
-                        });
-                    }
-                    catch (error) {
-                        console.log(`Failed to run check suite ${checkSuite.id}: ${error.message}`);
-                    }
-                }
+                yield handleChangeOfLabel(octokit, owner, repo);
                 return;
             }
-            const labels = yield getPullRequestLabels(octokit, owner, repository, pullRequest.number);
+            const labels = yield getPullRequestLabels(octokit, owner, repo, pullRequest.number);
             if (skipValidation(labels)) {
                 console.log("Commit messages validation skipped by label (skip-issue)");
                 return;
@@ -3572,10 +3579,11 @@ function run() {
             // the unlikely situation of a PR with more than 250 commits
             yield octokit
                 .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
-                owner: owner,
-                repo: repository,
+                owner,
+                repo,
                 pull_number: pullRequest.number
-            }).then(items => {
+            })
+                .then(items => {
                 var anyMissing = false;
                 items.forEach(item => {
                     const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);

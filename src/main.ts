@@ -1,6 +1,9 @@
 import * as core from '@actions/core'
 import { context, GitHub } from '@actions/github'
-import { PullsGetResponseLabelsItem } from '@octokit/rest';
+import {
+  PullsGetResponseLabelsItem,
+  ChecksListSuitesForRefResponse
+} from '@octokit/rest';
 import { WebhookPayload } from '@actions/github/lib/interfaces';
 
 
@@ -48,6 +51,31 @@ async function getPullRequestLabels(
 }
 
 
+async function runAllChecks(
+  octokit: GitHub,
+  owner: string,
+  repo: string,
+  suites: ChecksListSuitesForRefResponse
+): Promise<void> {
+
+  console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
+  console.log('\n\n\n\n\n')
+
+  for (var i = 0; i < suites.check_suites.length; i++) {
+    let checkSuite = suites.check_suites[i];
+    try {
+      await octokit.checks.rerequestSuite({
+        owner,
+        repo,
+        check_suite_id: checkSuite.id
+      })
+    } catch (error) {
+      console.log(`Failed to run check suite ${checkSuite.id}: ${error.message}`);
+    }
+  }
+}
+
+
 function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
   for (var i = 0; i < labels.length; i++) {
     let label = labels[i];
@@ -59,19 +87,35 @@ function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
 }
 
 
-function shouldTriggerPreviousChecks(payload: WebhookPayload): boolean {
+function isChangeOfLabel(payload: WebhookPayload): boolean {
   return payload.action == 'labeled' || payload.action == 'unlabeled';
+}
+
+
+async function handleChangeOfLabel(
+  octokit: GitHub,
+  owner: string,
+  repo: string
+): Promise<void> {
+  const ref = requireValue(() => context.payload.pull_request?.head.sha, 'pr_head_sha');
+
+  const suitesForRef = await octokit.checks.listSuitesForRef({
+    owner,
+    repo,
+    ref
+  })
+
+  console.log('Forcing a re-check of previous checks');
+  await runAllChecks(octokit, owner, repo, suitesForRef.data);
+  return;
 }
 
 
 async function run(): Promise<void> {
   try {
-    // console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
-    // console.log('\n\n\n\n\n')
-
     const octokit = new GitHub(core.getInput('myToken'));
     const owner = requireValue(() => context.payload.repository?.owner?.login, 'owner');
-    const repository = requireValue(() => context.payload.repository?.name, 'repository');
+    const repo = requireValue(() => context.payload.repository?.name, 'repository');
 
     const pullRequest = context.payload.pull_request;
 
@@ -79,42 +123,19 @@ async function run(): Promise<void> {
       throw new NotAPullRequestError();
     }
 
-    if (shouldTriggerPreviousChecks(context.payload)) {
+    if (isChangeOfLabel(context.payload)) {
       // this action is fired when a PR labels change;
       // since GitHub creates a new check, pass this one and force a re-check of
       // previously failed checks
-      const pr_commit_sha = requireValue(() => context.payload.pull_request?.head.sha,
-        'pr_head_sha');
-
-      // Test: get all check suites
-      const all_check_suites = await octokit.checks.listSuitesForRef({
+      await handleChangeOfLabel(
+        octokit,
         owner,
-        repo: repository,
-        ref: pr_commit_sha
-      })
-
-      console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
-      console.log('\n\n\n\n\n')
-
-      console.log('Forcing a re-check of previous checks');
-
-      for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
-        let checkSuite = all_check_suites.data.check_suites[i];
-        //if (checkSuite.status == 'completed') {
-        try {
-          await octokit.checks.rerequestSuite({
-            owner,
-            repo: repository,
-            check_suite_id: checkSuite.id
-          })
-        } catch (error) {
-          console.log(`Failed to run check suite ${checkSuite.id}: ${error.message}`);
-        }
-      }
+        repo,
+      );
       return;
     }
 
-    const labels = await getPullRequestLabels(octokit, owner, repository, pullRequest.number);
+    const labels = await getPullRequestLabels(octokit, owner, repo, pullRequest.number);
 
     if (skipValidation(labels)) {
       console.log("Commit messages validation skipped by label (skip-issue)");
@@ -126,11 +147,12 @@ async function run(): Promise<void> {
     await octokit
       .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
         {
-          owner: owner,
-          repo: repository,
+          owner,
+          repo,
           pull_number: pullRequest.number
         }
-      ).then(items => {
+      )
+      .then(items => {
         var anyMissing = false;
 
         items.forEach(item => {
@@ -149,7 +171,6 @@ async function run(): Promise<void> {
           throw new Error("One or more commit messages don't refer any issue.");
         }
       })
-
   } catch (error) {
     core.setFailed(error.message)
   }
