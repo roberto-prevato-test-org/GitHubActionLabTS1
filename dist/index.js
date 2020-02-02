@@ -3542,7 +3542,10 @@ function run() {
                 const all_check_suites = yield octokit.request('GET /repos/:owner/:repo/commits/:ref/check-suites', {
                     owner,
                     repo: repository,
-                    ref: pr_commit_sha
+                    ref: pr_commit_sha,
+                    headers: {
+                        accept: 'application/vnd.github.antiope-preview+json'
+                    }
                 });
                 console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
                 console.log('\n\n\n\n\n');
