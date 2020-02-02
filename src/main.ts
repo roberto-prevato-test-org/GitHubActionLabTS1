@@ -1,6 +1,7 @@
 import * as core from '@actions/core'
 import { context, GitHub } from '@actions/github'
 import { PullsGetResponseLabelsItem } from '@octokit/rest';
+import { WebhookPayload } from '@actions/github/lib/interfaces';
 
 
 class NotAPullRequestError extends Error {
@@ -58,6 +59,11 @@ function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
 }
 
 
+function shouldTriggerPreviousChecks(payload: WebhookPayload): boolean {
+  return payload.action == 'labeled' || payload.action == 'unlabeled';
+}
+
+
 async function run(): Promise<void> {
   try {
     console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
@@ -73,11 +79,33 @@ async function run(): Promise<void> {
       throw new NotAPullRequestError();
     }
 
-    // get the PR labels
-    const labels = await getPullRequestLabels(octokit, owner, repository, pullRequest.number);
+    if (shouldTriggerPreviousChecks(context.payload)) {
+      // this action is fired when a PR labels change;
+      // since GitHub creates a new check, pass this one and force a re-check of
+      // previously failed checks
+      const pr_commit_sha = requireValue(() => context.payload.pull_request?.head.sha,
+                                         'pr_head_sha');
 
-    console.log(`Labels: ${JSON.stringify(labels, undefined, 2)}`);
-    console.log('\n\n\n\n\n')
+      // Test: get all check suites
+      const all_check_suites = await octokit.request('GET /repos/:owner/:repo/commits/:ref/check-suites', {
+        owner,
+        repo: repository,
+        ref: pr_commit_sha
+      })
+
+      console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
+      console.log('\n\n\n\n\n')
+
+      console.log('Forcing a re-check of previous checks');
+      await octokit.request('POST /repos/:owner/:repo/check-suites/:check_suite_id/rerequest', {
+        owner,
+        repo: repository,
+        check_suite_id: pr_commit_sha
+      })
+      return;
+    }
+
+    const labels = await getPullRequestLabels(octokit, owner, repository, pullRequest.number);
 
     if (skipValidation(labels)) {
       console.log("Commit messages validation skipped by label (skip-issue)");
