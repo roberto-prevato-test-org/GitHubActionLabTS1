@@ -3528,8 +3528,8 @@ function run() {
                     });
                 });
             }
-            catch (_a) {
-                console.log('Method 0 does not work');
+            catch (error) {
+                console.log(`Method 0 does not work, fail with message: ${error.message}`);
             }
             try {
                 // NB: the following method would return only 250 commits
@@ -3541,8 +3541,8 @@ function run() {
                 console.log('1: -------------------------------------------');
                 console.log(JSON.stringify(commitsResponse, null, 2));
             }
-            catch (_b) {
-                console.log('Method 1 does not work');
+            catch (error) {
+                console.log(`Method 1 does not work, fail with message: ${error.message}`);
             }
             try {
                 const response = yield octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
@@ -3555,8 +3555,8 @@ function run() {
                 console.log(JSON.stringify(data, null, 2));
                 // const messages = commits.map(item => item.commit.message);
             }
-            catch (_c) {
-                console.log('Method 2 does not work');
+            catch (error) {
+                console.log(`Method 2 does not work, fail with message: ${error.message}`);
             }
         }
         catch (error) {

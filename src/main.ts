@@ -64,8 +64,8 @@ async function run(): Promise<void> {
         });
 
       })
-    } catch {
-      console.log('Method 0 does not work')
+    } catch (error) {
+      console.log(`Method 0 does not work, fail with message: ${error.message}`)
     }
 
     try {
@@ -77,8 +77,8 @@ async function run(): Promise<void> {
     });
     console.log('1: -------------------------------------------');
     console.log(JSON.stringify(commitsResponse, null, 2));
-  } catch {
-    console.log('Method 1 does not work')
+  } catch (error) {
+    console.log(`Method 1 does not work, fail with message: ${error.message}`)
   }
 
   try {
@@ -92,8 +92,8 @@ async function run(): Promise<void> {
     console.log('2: -------------------------------------------');
     console.log(JSON.stringify(data, null, 2));
     // const messages = commits.map(item => item.commit.message);
-  } catch {
-    console.log('Method 2 does not work')
+  } catch (error) {
+    console.log(`Method 2 does not work, fail with message: ${error.message}`)
   }
   } catch (error) {
     core.setFailed(error.message)
