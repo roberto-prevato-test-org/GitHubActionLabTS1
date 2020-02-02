@@ -10,10 +10,10 @@ class NotAPullRequestError extends Error {
 }
 
 
-function requireValue(callback: () => (string | undefined)): string {
+function requireValue(callback: () => (string | undefined), hint: string): string {
   const value = callback();
   if (!value)
-    throw new Error("Missing value");
+    throw new Error(`Missing value for ${hint}`);
   return value;
 }
 
@@ -33,8 +33,8 @@ function getIssuesIdsFromCommitMessage(message: string): (string[] | null) {
 async function run(): Promise<void> {
   try {
     const octokit = new GitHub(core.getInput('myToken'));
-    const owner = requireValue(() => context.payload.owner?.name);
-    const repository = requireValue(() => context.payload.repository?.name);
+    const owner = requireValue(() => context.payload.repository?.owner?.name, 'owner');
+    const repository = requireValue(() => context.payload.repository?.name, 'repository');
 
     const pullRequest = context.payload.pull_request;
 
@@ -42,7 +42,7 @@ async function run(): Promise<void> {
       throw new NotAPullRequestError();
     }
 
-    /*
+    try {
     // NOTA BENE: the following fails with message
     // "##[error]fatal: couldn't find remote ref refs/pull/1/merge"
     await octokit
@@ -64,7 +64,11 @@ async function run(): Promise<void> {
         });
 
       })
-    */
+    } catch {
+      console.log('Method 0 does not work')
+    }
+
+    try {
     // NB: the following method would return only 250 commits
     const commitsResponse = await octokit.pulls.listCommits({
       owner: owner,
@@ -73,7 +77,11 @@ async function run(): Promise<void> {
     });
     console.log('1: -------------------------------------------');
     console.log(JSON.stringify(commitsResponse, null, 2));
+  } catch {
+    console.log('Method 1 does not work')
+  }
 
+  try {
     const response = await octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits',
     {
       owner,
@@ -84,7 +92,9 @@ async function run(): Promise<void> {
     console.log('2: -------------------------------------------');
     console.log(JSON.stringify(data, null, 2));
     // const messages = commits.map(item => item.commit.message);
-
+  } catch {
+    console.log('Method 2 does not work')
+  }
   } catch (error) {
     core.setFailed(error.message)
   }

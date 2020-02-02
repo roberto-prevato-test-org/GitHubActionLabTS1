@@ -3485,10 +3485,10 @@ class NotAPullRequestError extends Error {
             'This action must be used with a PR.');
     }
 }
-function requireValue(callback) {
+function requireValue(callback, hint) {
     const value = callback();
     if (!value)
-        throw new Error("Missing value");
+        throw new Error(`Missing value for ${hint}`);
     return value;
 }
 function getIssuesIdsFromCommitMessage(message) {
@@ -3503,52 +3503,61 @@ function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             const octokit = new github_1.GitHub(core.getInput('myToken'));
-            const owner = requireValue(() => { var _a; return (_a = github_1.context.payload.owner) === null || _a === void 0 ? void 0 : _a.name; });
-            const repository = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; });
+            const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.name; }, 'owner');
+            const repository = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
                 throw new NotAPullRequestError();
             }
-            /*
-            // NOTA BENE: the following fails with message
-            // "##[error]fatal: couldn't find remote ref refs/pull/1/merge"
-            await octokit
-              .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
-              {
-                owner: owner,
-                repo: repository,
-                pull_number: pullRequest.number
-              }).then(commits => {
-        
-                commits.forEach(item => {
-                  const issuesIds = getIssuesIdsFromCommitMessage(item.message);
-        
-                  if (!issuesIds) {
-                    console.error(`Commit ${item.sha} with message "${item.message}"
-                    does not refer any issue.
-                    `)
-                  }
+            try {
+                // NOTA BENE: the following fails with message
+                // "##[error]fatal: couldn't find remote ref refs/pull/1/merge"
+                yield octokit
+                    .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+                    owner: owner,
+                    repo: repository,
+                    pull_number: pullRequest.number
+                }).then(commits => {
+                    commits.forEach(item => {
+                        const issuesIds = getIssuesIdsFromCommitMessage(item.message);
+                        if (!issuesIds) {
+                            console.error(`Commit ${item.sha} with message "${item.message}"
+            does not refer any issue.
+            `);
+                        }
+                    });
                 });
-        
-              })
-            */
-            // NB: the following method would return only 250 commits
-            const commitsResponse = yield octokit.pulls.listCommits({
-                owner: owner,
-                repo: repository,
-                pull_number: pullRequest.number
-            });
-            console.log('1: -------------------------------------------');
-            console.log(JSON.stringify(commitsResponse, null, 2));
-            const response = yield octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
-                owner,
-                repo: repository,
-                pull_number: pullRequest.number
-            });
-            const data = yield response.data();
-            console.log('2: -------------------------------------------');
-            console.log(JSON.stringify(data, null, 2));
-            // const messages = commits.map(item => item.commit.message);
+            }
+            catch (_a) {
+                console.log('Method 0 does not work');
+            }
+            try {
+                // NB: the following method would return only 250 commits
+                const commitsResponse = yield octokit.pulls.listCommits({
+                    owner: owner,
+                    repo: repository,
+                    pull_number: pullRequest.number
+                });
+                console.log('1: -------------------------------------------');
+                console.log(JSON.stringify(commitsResponse, null, 2));
+            }
+            catch (_b) {
+                console.log('Method 1 does not work');
+            }
+            try {
+                const response = yield octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+                    owner,
+                    repo: repository,
+                    pull_number: pullRequest.number
+                });
+                const data = yield response.data();
+                console.log('2: -------------------------------------------');
+                console.log(JSON.stringify(data, null, 2));
+                // const messages = commits.map(item => item.commit.message);
+            }
+            catch (_c) {
+                console.log('Method 2 does not work');
+            }
         }
         catch (error) {
             core.setFailed(error.message);
