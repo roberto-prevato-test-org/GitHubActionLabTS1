@@ -3510,9 +3510,8 @@ function getPullRequestLabels(octokit, owner, repo, pull_number) {
     });
 }
 function skipValidation(labels) {
-    for (var i = 0; i++; i < labels.length) {
+    for (var i = 0; i < labels.length; i++) {
         let label = labels[i];
-        console.info(`Label: ${label.id} ${label.name}`);
         if (label.name == "skip-issue") {
             return true;
         }

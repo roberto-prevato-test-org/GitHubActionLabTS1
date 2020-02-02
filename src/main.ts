@@ -48,9 +48,8 @@ async function getPullRequestLabels(
 
 
 function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
-  for (var i = 0; i++; i < labels.length) {
+  for (var i = 0; i < labels.length; i++) {
     let label = labels[i];
-    console.info(`Label: ${label.id} ${label.name}`);
     if (label.name == "skip-issue") {
       return true;
     }
