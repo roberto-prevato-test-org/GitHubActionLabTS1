@@ -96,15 +96,18 @@ async function run(): Promise<void> {
       console.log(`all_check_suites: ${JSON.stringify(all_check_suites, undefined, 2)}`);
       console.log('\n\n\n\n\n')
 
-      // TODO: get the right check suite
-      const last_check_suite = all_check_suites.data.check_suites[0].id
-
       console.log('Forcing a re-check of previous checks');
-      await octokit.checks.rerequestSuite({
-        owner,
-        repo: repository,
-        check_suite_id: last_check_suite
-      })
+
+      for (var i = 0; i < all_check_suites.data.check_suites.length; i++) {
+        let checkSuite = all_check_suites.data.check_suites[0];
+        if (checkSuite.status == 'completed') {
+          await octokit.checks.rerequestSuite({
+            owner,
+            repo: repository,
+            check_suite_id: checkSuite.id
+          })
+        }
+      }
       return;
     }
 
