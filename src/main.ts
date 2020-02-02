@@ -65,7 +65,7 @@ function shouldTriggerPreviousChecks(payload: WebhookPayload): boolean {
 
 
 async function run(): Promise<void> {
-  let anyMissing = false;
+  var anyMissing = false;
 
   try {
     // console.log(`The context: ${JSON.stringify(context, undefined, 2)}`);
