@@ -88,13 +88,11 @@ async function run(): Promise<void> {
 
       // Test: get all check suites
       const all_check_suites = await octokit.request('GET /repos/:owner/:repo/commits/:ref/check-suites', {
-        data: {
-          owner,
-          repo: repository,
-          ref: pr_commit_sha,
-        },
-        headers: {
-          accept: 'application/vnd.github.antiope-preview+json'
+        owner,
+        repo: repository,
+        ref: pr_commit_sha,
+        mediaType: {
+          previews: ['antiope']
         }
       })
 
