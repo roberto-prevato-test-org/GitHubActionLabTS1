@@ -3509,23 +3509,45 @@ function run() {
             if (!pullRequest) {
                 throw new NotAPullRequestError();
             }
-            yield octokit
-                .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+            /*
+            // NOTA BENE: the following fails with message
+            // "##[error]fatal: couldn't find remote ref refs/pull/1/merge"
+            await octokit
+              .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
+              {
                 owner: owner,
                 repo: repository,
                 pull_number: pullRequest.number
-            }).then(commits => {
+              }).then(commits => {
+        
                 commits.forEach(item => {
-                    const issuesIds = getIssuesIdsFromCommitMessage(item.message);
-                    if (!issuesIds) {
-                        console.error(`Commit ${item.sha} with message "${item.message}"
-            does not refer any issue.
-            `);
-                    }
+                  const issuesIds = getIssuesIdsFromCommitMessage(item.message);
+        
+                  if (!issuesIds) {
+                    console.error(`Commit ${item.sha} with message "${item.message}"
+                    does not refer any issue.
+                    `)
+                  }
                 });
-            });
+        
+              })
+            */
             // NB: the following method would return only 250 commits
-            // const commitsResponse = await octokit.pulls.listCommits();
+            const commitsResponse = yield octokit.pulls.listCommits({
+                owner: owner,
+                repo: repository,
+                pull_number: pullRequest.number
+            });
+            console.log('1: -------------------------------------------');
+            console.log(JSON.stringify(commitsResponse, null, 2));
+            const response = yield octokit.request('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+                owner,
+                repo: repository,
+                pull_number: pullRequest.number
+            });
+            const data = yield response.data();
+            console.log('2: -------------------------------------------');
+            console.log(JSON.stringify(data, null, 2));
             // const messages = commits.map(item => item.commit.message);
         }
         catch (error) {
