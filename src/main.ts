@@ -75,6 +75,9 @@ async function run(): Promise<void> {
     // get the PR labels
     const labels = await getPullRequestLabels(octokit, owner, repository, pullRequest.number);
 
+    console.log(`Labels: ${JSON.stringify(labels, undefined, 2)}`);
+    console.log('\n\n\n\n\n')
+
     if (skipValidation(labels)) {
       console.log("Commit messages validation skipped by label (skip-issue)");
       return;
