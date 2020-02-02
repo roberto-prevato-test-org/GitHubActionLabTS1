@@ -53,9 +53,9 @@ async function run(): Promise<void> {
         pull_number: pullRequest.number
       }).then(commits => {
 
-        console.log('0: -------------------------------------------');
-        console.log('1: commits response');
-        console.log(JSON.stringify(commits, null, 2));
+        // console.log('0: -------------------------------------------');
+        // console.log('1: commits response');
+        // console.log(JSON.stringify(commits, null, 2));
 
         // NB: funny return payload; a list of commits are items with commit property
         commits.forEach(item => {
@@ -95,7 +95,7 @@ async function run(): Promise<void> {
       repo: repository,
       pull_number: pullRequest.number
     });
-    const data = await response.data();
+    const data = response.data;
     console.log('2: -------------------------------------------');
     console.log(JSON.stringify(data, null, 2));
     // const messages = commits.map(item => item.commit.message);
