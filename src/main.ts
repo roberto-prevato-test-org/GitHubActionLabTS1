@@ -51,6 +51,7 @@ async function getPullRequestLabels(
 }
 
 
+// NB: the following function doesn't do what we thought it would do!
 async function runAllChecks(
   octokit: GitHub,
   owner: string,
@@ -61,8 +62,7 @@ async function runAllChecks(
   // console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
   // console.log('\n\n\n\n\n')
 
-  for (var i = 0; i < suites.check_suites.length; i++) {
-    let checkSuite = suites.check_suites[i];
+  for (const checkSuite of suites.check_suites) {
     try {
       await octokit.checks.rerequestSuite({
         owner,
@@ -76,9 +76,59 @@ async function runAllChecks(
 }
 
 
+async function markPreviousRunsAsNeutral(
+  octokit: GitHub,
+  owner: string,
+  repo: string
+) {
+  const ref = requireValue(() => context.payload.pull_request?.head.sha, 'pr_head_sha');
+
+  const suitesResponse = await octokit.checks.listSuitesForRef({
+    owner,
+    repo,
+    ref
+  })
+
+  const suites = suitesResponse.data;
+
+  // keep only check suites for github-actions app
+  let githubActionsSuites = suites.check_suites
+    .filter(item => item.app.name == 'GitHub Actions')
+
+  for (const checkSuite of githubActionsSuites) {
+    let runsResponse = await octokit.checks.listForSuite({
+      check_suite_id: checkSuite.id,
+      owner,
+      repo
+    });
+
+    if (runsResponse.data.total_count > 250) {
+      // TODO: support this scenario
+      throw new Error('More than 250 check runs are not supported');
+    }
+
+    let checkCommitsMessageRuns = runsResponse.data.check_runs
+      .filter(item => item.name == 'Check Commit Messages'
+                      && item.status == 'completed');
+
+    if (!checkCommitsMessageRuns.length) {
+      continue;
+    }
+
+    for (const checkCommitsMessageRun of checkCommitsMessageRuns) {
+      await octokit.checks.update({
+        check_run_id: checkCommitsMessageRun.id,
+        owner,
+        repo,
+        conclusion: 'neutral'
+      });
+    }
+  }
+}
+
+
 function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
-  for (var i = 0; i < labels.length; i++) {
-    let label = labels[i];
+  for (const label of labels) {
     if (label.name == "skip-issue") {
       return true;
     }
@@ -105,8 +155,10 @@ async function handleChangeOfLabel(
     ref
   })
 
-  console.log('Forcing a re-check of previous checks');
-  await runAllChecks(octokit, owner, repo, suitesForRef.data);
+  // TODO: the following is the wrong strategy
+  // console.log('Forcing a re-check of previous checks');
+  // await runAllChecks(octokit, owner, repo, suitesForRef.data);
+
   return;
 }
 
@@ -123,18 +175,14 @@ async function run(): Promise<void> {
       throw new NotAPullRequestError();
     }
 
-    if (isChangeOfLabel(context.payload)) {
-      // this action is fired when a PR labels change;
-      // since GitHub creates a new check, pass this one and force a re-check of
-      // previously failed checks
-      await handleChangeOfLabel(
-        octokit,
-        owner,
-        repo,
-      );
-      return;
-    }
+    // start by marking previous check runs of the same type neutral
+    // they are not relevant anymore, because a new run is happening in the same suite
+    // re-running the suite wouldn't help because a suite is considered to be running
+    // even if a single new check run is happening
+    await markPreviousRunsAsNeutral(octokit, owner, repo);
 
+    // if the pull request has the skip-issue label, this check is skipped,
+    // and previous runs are marked as neutral
     const labels = await getPullRequestLabels(octokit, owner, repo, pullRequest.number);
 
     if (skipValidation(labels)) {
