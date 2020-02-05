@@ -3598,6 +3598,10 @@ function run() {
             const octokit = new github_1.GitHub(core.getInput('myToken'));
             const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.login; }, 'owner');
             const repo = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
+            // TODO:
+            // 1. look for issue ids in PR title and description
+            // 2. support by action configuration to look for issue ids in both comments and PR
+            console.log(`context: ${JSON.stringify(github_1.context, null, 2)}\n-------`);
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
                 throw new NotAPullRequestError();
@@ -3608,7 +3612,6 @@ function run() {
             // even if a single new check run is happening
             yield markPreviousRunsAsNeutral(octokit, owner, repo);
             // if the pull request has the skip-issue label, this check is skipped,
-            // and previous runs are marked as neutral
             const labels = yield getPullRequestLabels(octokit, owner, repo, pullRequest.number);
             if (skipValidation(labels)) {
                 console.log("Commit messages validation skipped by label (skip-issue)");

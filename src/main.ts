@@ -169,6 +169,11 @@ async function run(): Promise<void> {
     const owner = requireValue(() => context.payload.repository?.owner?.login, 'owner');
     const repo = requireValue(() => context.payload.repository?.name, 'repository');
 
+    // TODO:
+    // 1. look for issue ids in PR title and description
+    // 2. support by action configuration to look for issue ids in both comments and PR
+    console.log(`context: ${JSON.stringify(context, null, 2)}\n-------`);
+
     const pullRequest = context.payload.pull_request;
 
     if (!pullRequest) {
@@ -182,7 +187,6 @@ async function run(): Promise<void> {
     await markPreviousRunsAsNeutral(octokit, owner, repo);
 
     // if the pull request has the skip-issue label, this check is skipped,
-    // and previous runs are marked as neutral
     const labels = await getPullRequestLabels(octokit, owner, repo, pullRequest.number);
 
     if (skipValidation(labels)) {
