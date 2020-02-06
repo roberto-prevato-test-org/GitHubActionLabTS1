@@ -3548,6 +3548,7 @@ function getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest) {
                 });
             }
             catch (error) {
+                console.log(JSON.stringify(error, null, 2));
                 if (error.message == 'Not Found') {
                     // this is fine; not all ids must refer an issues
                     console.log(`An issue with id: '${id}' was not found.`);
