@@ -3491,7 +3491,7 @@ function requireValue(callback, hint) {
         throw new Error(`Missing value for ${hint}`);
     return value;
 }
-function getIssuesIdsFromText(text) {
+function getIdsFromText(text) {
     if (!text || text.indexOf('#') == -1)
         return null;
     const match = text.match(/(#\d+)/g);
@@ -3516,11 +3516,42 @@ function distinct(array) {
 function emptyOrNull(array) {
     return array == null || array.length == 0;
 }
-function getIssuesIdsFromPullRequestProperties(pullRequest) {
+function getIdsFromPullRequestProperties(pullRequest) {
     if (!pullRequest) {
         throw new NotAPullRequestError();
     }
-    return mergeArrays(getIssuesIdsFromText(pullRequest.title), getIssuesIdsFromText(pullRequest.body));
+    return mergeArrays(getIdsFromText(pullRequest.title), getIdsFromText(pullRequest.body));
+}
+function getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const idsInPullRequest = getIdsFromPullRequestProperties(pullRequest);
+        const values = [];
+        if (emptyOrNull(idsInPullRequest))
+            return values;
+        if (idsInPullRequest == null)
+            throw new Error('Expected a value');
+        for (const id in distinct(idsInPullRequest)) {
+            const issueNumber = Number(id.replace('#', ''));
+            if (isNaN(issueNumber)) {
+                // NB: issue number is expected to be a string with leading # and followed by \d+
+                // if this happens, it's a program error
+                throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`);
+            }
+            const response = yield octokit.issues.get({
+                owner,
+                repo,
+                issue_number: issueNumber
+            });
+            if (response.status == 404) {
+                // this is fine; not all ids must refer an issues
+                console.log(`An issue with id: '${id}' was not found.`);
+            }
+            else {
+                values.push(response.data);
+            }
+        }
+        return values;
+    });
 }
 function getPullRequestLabels(octokit, owner, repo, pull_number) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -3592,7 +3623,7 @@ function getIssueIdsFromCommitMessages(octokit, owner, repo, pull_number) {
         })
             .then(items => {
             items.forEach(item => {
-                const issuesIds = getIssuesIdsFromText(item.commit.message);
+                const issuesIds = getIdsFromText(item.commit.message);
                 if (!issuesIds) {
                     console.error(`Commit ${item.sha} with message "${item.commit.message}"
                            does not refer any issue.`);
@@ -3602,10 +3633,11 @@ function getIssueIdsFromCommitMessages(octokit, owner, repo, pull_number) {
         return distinct(issueIds);
     });
 }
-function getPositiveCommentBody(distinctIssuesIds) {
-    if (!distinctIssuesIds.length)
-        throw new Error('Expected a populated array of issues ids.');
-    let emojis = ':sparkles: :cake: :sparkles:';
+function getPositiveCommentBody(issues) {
+    if (!issues.length)
+        throw new Error('Expected a populated array of issues.');
+    const emojis = ':sparkles: :cake: :sparkles:';
+    const distinctIssuesIds = distinct(issues.map(item => item.id));
     if (distinctIssuesIds.length == 1)
         return `Great! The PR references this issue: ${distinctIssuesIds[0]} ${emojis}`;
     return `Great! The PR references these issues: ${distinctIssuesIds.join(', ')} ${emojis}`;
@@ -3616,10 +3648,6 @@ function run() {
             const octokit = new github_1.GitHub(core.getInput('myToken'));
             const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.login; }, 'owner');
             const repo = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
-            // TODO:
-            // 1. look for issue ids in PR title and body
-            // 2. support by action configuration to look for issue ids in both comments and PR
-            // console.log(`context: ${JSON.stringify(context, null, 2)}\n-------`);
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
                 throw new NotAPullRequestError();
@@ -3635,42 +3663,18 @@ function run() {
                 console.log("`Link to issue` validation skipped by label (skip-issue)");
                 return;
             }
-            let issuesIdsInPullRequest = getIssuesIdsFromPullRequestProperties(pullRequest);
-            if (emptyOrNull(issuesIdsInPullRequest)) {
-                // TODO: throw exception, require the PR to be edited (?)
-                // TODO: get issue ids from commit messages, too? (looks overcomplicated)
+            let issuesIdsInPullRequest = yield getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest);
+            if (!issuesIdsInPullRequest.length) {
                 throw new Error("The pull request doesn't reference any issue.");
             }
             if (issuesIdsInPullRequest == null)
                 throw new Error('Program flow error: issues ids must be present here.');
-            // add comment to PR
-            // NB: this is a code comment!! But it looks like there is no API to post
-            // a regular timeline comment on a PR (???)
-            const firstCommit = yield octokit.pulls.listCommits({
-                owner,
-                repo,
-                pull_number: pullRequest.number
-            }).then(response => response.data.length ? response.data[0] : null);
-            if (firstCommit == null)
-                // this should be impossible
-                throw new Error('The PR doesn`t have any commit.');
             yield octokit.issues.createComment({
                 owner,
                 repo,
-                body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
+                body: getPositiveCommentBody(issuesIdsInPullRequest),
                 issue_number: pullRequest.number
             });
-            /*
-            // NB: the following can only create a comment related to a commit!
-            await octokit.pulls.createComment({
-              owner,
-              repo,
-              body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
-              pull_number: pullRequest.number,
-              commit_id: pullRequest.head.sha,
-              path: firstCommit.commit.url
-            });
-            */
         }
         catch (error) {
             core.setFailed(error.message);

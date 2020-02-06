@@ -1,7 +1,7 @@
 import * as core from '@actions/core'
 import { context, GitHub } from '@actions/github'
 import {
-  PullsGetResponseLabelsItem
+  PullsGetResponseLabelsItem, IssuesGetResponse
 } from '@octokit/rest';
 import { WebhookPayload } from '@actions/github/lib/interfaces';
 
@@ -22,7 +22,7 @@ function requireValue(callback: () => (string | undefined), hint: string): strin
 }
 
 
-function getIssuesIdsFromText(
+function getIdsFromText(
   text: (string | undefined | null)
 ): (string[] | null) {
   if (!text || text.indexOf('#') == -1)
@@ -36,8 +36,7 @@ function getIssuesIdsFromText(
 }
 
 
-function mergeArrays<T>(...arrays: (T[] | null)[]) : (T[] | null)
-{
+function mergeArrays<T>(...arrays: (T[] | null)[]): (T[] | null) {
   let values: (T[] | null) = null;
   for (const array of arrays) {
     if (array === null)
@@ -50,17 +49,17 @@ function mergeArrays<T>(...arrays: (T[] | null)[]) : (T[] | null)
 }
 
 
-function distinct<T>(array: T[]) : T[] {
+function distinct<T>(array: T[]): T[] {
   return array.filter((item, index, self) => self.indexOf(item) === index);
 }
 
 
-function emptyOrNull<T>(array: (T[] | null)) : boolean {
+function emptyOrNull<T>(array: (T[] | null)): boolean {
   return array == null || array.length == 0;
 }
 
 
-function getIssuesIdsFromPullRequestProperties(
+function getIdsFromPullRequestProperties(
   pullRequest: WebhookPayload["pull_request"]
 ): (string[] | null) {
   if (!pullRequest) {
@@ -68,9 +67,51 @@ function getIssuesIdsFromPullRequestProperties(
   }
 
   return mergeArrays(
-    getIssuesIdsFromText(pullRequest.title),
-    getIssuesIdsFromText(pullRequest.body)
+    getIdsFromText(pullRequest.title),
+    getIdsFromText(pullRequest.body)
   );
+}
+
+
+async function getIssuesFromPullRequestProperties(
+  octokit: GitHub,
+  owner: string,
+  repo: string,
+  pullRequest: WebhookPayload["pull_request"]
+): Promise<IssuesGetResponse[]> {
+  const idsInPullRequest = getIdsFromPullRequestProperties(pullRequest);
+  const values: IssuesGetResponse[] = [];
+
+  if (emptyOrNull(idsInPullRequest))
+    return values;
+
+  if (idsInPullRequest == null)
+    throw new Error('Expected a value');
+
+  for (const id in distinct(idsInPullRequest)) {
+    const issueNumber = Number(id.replace('#', ''));
+
+    if (isNaN(issueNumber)) {
+      // NB: issue number is expected to be a string with leading # and followed by \d+
+      // if this happens, it's a program error
+      throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`)
+    }
+
+    const response = await octokit.issues.get({
+      owner,
+      repo,
+      issue_number: issueNumber
+    });
+
+    if (response.status == 404) {
+      // this is fine; not all ids must refer an issues
+      console.log(`An issue with id: '${id}' was not found.`);
+    } else {
+      values.push(response.data);
+    }
+  }
+
+  return values;
 }
 
 
@@ -123,7 +164,7 @@ async function markPreviousRunsAsNeutral(
 
     let checkCommitsMessageRuns = runsResponse.data.check_runs
       .filter(item => item.name == 'Check Commit Messages'
-                      && item.status == 'completed');
+        && item.status == 'completed');
 
     if (!checkCommitsMessageRuns.length) {
       continue;
@@ -157,38 +198,39 @@ async function getIssueIdsFromCommitMessages(
   repo: string,
   pull_number: number
 ): Promise<string[]> {
-    var issueIds: string[] = [];
+  var issueIds: string[] = [];
 
-    // NB: paginate fetches all commits for the PR, so it handles
-    // the unlikely situation of a PR with more than 250 commits
-    await octokit
-      .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
-        {
-          owner,
-          repo,
-          pull_number
-        }
-      )
-      .then(items => {
-        items.forEach(item => {
-          const issuesIds = getIssuesIdsFromText(item.commit.message);
+  // NB: paginate fetches all commits for the PR, so it handles
+  // the unlikely situation of a PR with more than 250 commits
+  await octokit
+    .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
+      {
+        owner,
+        repo,
+        pull_number
+      }
+    )
+    .then(items => {
+      items.forEach(item => {
+        const issuesIds = getIdsFromText(item.commit.message);
 
-          if (!issuesIds) {
-            console.error(`Commit ${item.sha} with message "${item.commit.message}"
+        if (!issuesIds) {
+          console.error(`Commit ${item.sha} with message "${item.commit.message}"
                            does not refer any issue.`)
-          }
-        });
-      })
+        }
+      });
+    })
 
   return distinct(issueIds);
 }
 
 
-function getPositiveCommentBody(distinctIssuesIds: string[]): string {
-  if (!distinctIssuesIds.length)
-    throw new Error('Expected a populated array of issues ids.');
+function getPositiveCommentBody(issues: IssuesGetResponse[]): string {
+  if (!issues.length)
+    throw new Error('Expected a populated array of issues.');
 
-  let emojis = ':sparkles: :cake: :sparkles:';
+  const emojis = ':sparkles: :cake: :sparkles:';
+  const distinctIssuesIds = distinct(issues.map(item => item.id));
 
   if (distinctIssuesIds.length == 1)
     return `Great! The PR references this issue: ${distinctIssuesIds[0]} ${emojis}`;
@@ -202,11 +244,6 @@ async function run(): Promise<void> {
     const octokit = new GitHub(core.getInput('myToken'));
     const owner = requireValue(() => context.payload.repository?.owner?.login, 'owner');
     const repo = requireValue(() => context.payload.repository?.name, 'repository');
-
-    // TODO:
-    // 1. look for issue ids in PR title and body
-    // 2. support by action configuration to look for issue ids in both comments and PR
-    // console.log(`context: ${JSON.stringify(context, null, 2)}\n-------`);
 
     const pullRequest = context.payload.pull_request;
 
@@ -228,47 +265,27 @@ async function run(): Promise<void> {
       return;
     }
 
-    let issuesIdsInPullRequest = getIssuesIdsFromPullRequestProperties(pullRequest);
+    let issuesIdsInPullRequest = await getIssuesFromPullRequestProperties(
+      octokit,
+      owner,
+      repo,
+      pullRequest
+    );
 
-    if (emptyOrNull(issuesIdsInPullRequest)) {
-      // TODO: throw exception, require the PR to be edited (?)
-      // TODO: get issue ids from commit messages, too? (looks overcomplicated)
+    if (!issuesIdsInPullRequest.length) {
       throw new Error("The pull request doesn't reference any issue.");
     }
 
     if (issuesIdsInPullRequest == null)
       throw new Error('Program flow error: issues ids must be present here.');
 
-    // add comment to PR
-    // NB: this is a code comment!! But it looks like there is no API to post
-    // a regular timeline comment on a PR (???)
-    const firstCommit = await octokit.pulls.listCommits({
-      owner,
-      repo,
-      pull_number: pullRequest.number
-    }).then(response => response.data.length ? response.data[0] : null);
-
-    if (firstCommit == null)
-      // this should be impossible
-      throw new Error('The PR doesn`t have any commit.');
-
     await octokit.issues.createComment({
       owner,
       repo,
-      body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
+      body: getPositiveCommentBody(issuesIdsInPullRequest),
       issue_number: pullRequest.number
     });
-    /*
-    // NB: the following can only create a comment related to a commit!
-    await octokit.pulls.createComment({
-      owner,
-      repo,
-      body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
-      pull_number: pullRequest.number,
-      commit_id: pullRequest.head.sha,
-      path: firstCommit.commit.url
-    });
-    */
+
   } catch (error) {
     core.setFailed(error.message)
   }
