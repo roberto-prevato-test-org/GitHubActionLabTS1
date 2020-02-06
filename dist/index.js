@@ -3532,26 +3532,6 @@ function getPullRequestLabels(octokit, owner, repo, pull_number) {
         return response.data.labels;
     });
 }
-// NB: the following function doesn't do what we thought it would do!
-// OBSOLETE, KEPT ONLY FOR REFERENCE
-function runAllChecks(octokit, owner, repo, suites) {
-    return __awaiter(this, void 0, void 0, function* () {
-        // console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
-        // console.log('\n\n\n\n\n')
-        for (const checkSuite of suites.check_suites) {
-            try {
-                yield octokit.checks.rerequestSuite({
-                    owner,
-                    repo,
-                    check_suite_id: checkSuite.id
-                });
-            }
-            catch (error) {
-                console.log(`Failed to run check suite ${checkSuite.id}: ${error.message}`);
-            }
-        }
-    });
-}
 function markPreviousRunsAsNeutral(octokit, owner, repo) {
     return __awaiter(this, void 0, void 0, function* () {
         const ref = requireValue(() => { var _a; return (_a = github_1.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.head.sha; }, 'pr_head_sha');
@@ -3639,7 +3619,7 @@ function run() {
             // TODO:
             // 1. look for issue ids in PR title and body
             // 2. support by action configuration to look for issue ids in both comments and PR
-            console.log(`context: ${JSON.stringify(github_1.context, null, 2)}\n-------`);
+            // console.log(`context: ${JSON.stringify(context, null, 2)}\n-------`);
             const pullRequest = github_1.context.payload.pull_request;
             if (!pullRequest) {
                 throw new NotAPullRequestError();
@@ -3664,27 +3644,33 @@ function run() {
             if (issuesIdsInPullRequest == null)
                 throw new Error('Program flow error: issues ids must be present here.');
             // add comment to PR
+            // NB: this is a code comment!! But it looks like there is no API to post
+            // a regular timeline comment on a PR (???)
+            const firstCommit = yield octokit.pulls.listCommits({
+                owner,
+                repo,
+                pull_number: pullRequest.number
+            }).then(response => response.data.length ? response.data[0] : null);
+            if (firstCommit == null)
+                // this should be impossible
+                throw new Error('The PR doesn`t have any commit.');
+            yield octokit.issues.createComment({
+                owner,
+                repo,
+                body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
+                issue_number: pullRequest.number
+            });
             /*
-            NB: this is a code comment!!
+            // NB: the following can only create a comment related to a commit!
             await octokit.pulls.createComment({
               owner,
               repo,
               body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
-              number: pullRequest.number,
+              pull_number: pullRequest.number,
               commit_id: pullRequest.head.sha,
-              path: ''
+              path: firstCommit.commit.url
             });
             */
-            const commentResponse = yield octokit.request('POST /repos/:owner/:repo/pull/:pull_number/comments', {
-                owner,
-                repo,
-                data: {
-                    body: getPositiveCommentBody(distinct(issuesIdsInPullRequest))
-                },
-                pull_number: pullRequest.number,
-            });
-            if (commentResponse.status >= 300)
-                throw new Error(`Comment response does not indicate success ${commentResponse.status}`);
         }
         catch (error) {
             core.setFailed(error.message);
