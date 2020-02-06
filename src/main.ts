@@ -5,6 +5,7 @@ import {
   ChecksListSuitesForRefResponse
 } from '@octokit/rest';
 import { WebhookPayload } from '@actions/github/lib/interfaces';
+import { isMaster } from 'cluster';
 
 
 class NotAPullRequestError extends Error {
@@ -23,15 +24,55 @@ function requireValue(callback: () => (string | undefined), hint: string): strin
 }
 
 
-function getIssuesIdsFromCommitMessage(message: string): (string[] | null) {
-  if (message.indexOf('#') == -1)
+function getIssuesIdsFromText(
+  text: (string | undefined | null)
+): (string[] | null) {
+  if (!text || text.indexOf('#') == -1)
     return null;
 
-  const match = message.match(/(#\d+)/g);
+  const match = text.match(/(#\d+)/g);
 
   if (!match)
     return null;
   return match;
+}
+
+
+function mergeArrays<T>(...arrays: (T[] | null)[]) : (T[] | null)
+{
+  let values: (T[] | null) = null;
+  for (const array of arrays) {
+    if (array === null)
+      continue;
+    if (values == null)
+      values = [];
+    values = values.concat(array);
+  }
+  return values;
+}
+
+
+function distinct<T>(array: T[]) : T[] {
+  return array.filter((item, index, self) => self.indexOf(item) === index);
+}
+
+
+function emptyOrNull<T>(array: (T[] | null)) : boolean {
+  return array == null || array.length == 0;
+}
+
+
+function getIssuesIdsFromPullRequestProperties(
+  pullRequest: WebhookPayload["pull_request"]
+): (string[] | null) {
+  if (!pullRequest) {
+    throw new NotAPullRequestError();
+  }
+
+  return mergeArrays(
+    getIssuesIdsFromText(pullRequest.title),
+    getIssuesIdsFromText(pullRequest.body)
+  );
 }
 
 
@@ -52,6 +93,7 @@ async function getPullRequestLabels(
 
 
 // NB: the following function doesn't do what we thought it would do!
+// OBSOLETE, KEPT ONLY FOR REFERENCE
 async function runAllChecks(
   octokit: GitHub,
   owner: string,
@@ -137,29 +179,49 @@ function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
 }
 
 
-function isChangeOfLabel(payload: WebhookPayload): boolean {
-  return payload.action == 'labeled' || payload.action == 'unlabeled';
+async function getIssueIdsFromCommitMessages(
+  octokit: GitHub,
+  owner: string,
+  repo: string,
+  pull_number: number
+): Promise<string[]> {
+    var issueIds: string[] = [];
+
+    // NB: paginate fetches all commits for the PR, so it handles
+    // the unlikely situation of a PR with more than 250 commits
+    await octokit
+      .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
+        {
+          owner,
+          repo,
+          pull_number
+        }
+      )
+      .then(items => {
+        items.forEach(item => {
+          const issuesIds = getIssuesIdsFromText(item.commit.message);
+
+          if (!issuesIds) {
+            console.error(`Commit ${item.sha} with message "${item.commit.message}"
+                           does not refer any issue.`)
+          }
+        });
+      })
+
+  return distinct(issueIds);
 }
 
 
-async function handleChangeOfLabel(
-  octokit: GitHub,
-  owner: string,
-  repo: string
-): Promise<void> {
-  const ref = requireValue(() => context.payload.pull_request?.head.sha, 'pr_head_sha');
+function getPositiveCommentBody(distinctIssuesIds: string[]): string {
+  if (!distinctIssuesIds.length)
+    throw new Error('Expected a populated array of issues ids.');
 
-  const suitesForRef = await octokit.checks.listSuitesForRef({
-    owner,
-    repo,
-    ref
-  })
+  let emojis = ':sparkles: :cake: :sparkles:';
 
-  // TODO: the following is the wrong strategy
-  // console.log('Forcing a re-check of previous checks');
-  // await runAllChecks(octokit, owner, repo, suitesForRef.data);
+  if (distinctIssuesIds.length == 1)
+    return `Great! The PR references this issue: ${distinctIssuesIds[0]} ${emojis}`;
 
-  return;
+  return `Great! The PR references these issues: ${distinctIssuesIds.join(', ')} ${emojis}`
 }
 
 
@@ -170,7 +232,7 @@ async function run(): Promise<void> {
     const repo = requireValue(() => context.payload.repository?.name, 'repository');
 
     // TODO:
-    // 1. look for issue ids in PR title and description
+    // 1. look for issue ids in PR title and body
     // 2. support by action configuration to look for issue ids in both comments and PR
     console.log(`context: ${JSON.stringify(context, null, 2)}\n-------`);
 
@@ -190,39 +252,31 @@ async function run(): Promise<void> {
     const labels = await getPullRequestLabels(octokit, owner, repo, pullRequest.number);
 
     if (skipValidation(labels)) {
-      console.log("Commit messages validation skipped by label (skip-issue)");
+      console.log("`Link to issue` validation skipped by label (skip-issue)");
       return;
     }
 
-    // NB: paginate fetches all commits for the PR, so it handles
-    // the unlikely situation of a PR with more than 250 commits
-    await octokit
-      .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits',
-        {
-          owner,
-          repo,
-          pull_number: pullRequest.number
-        }
-      )
-      .then(items => {
-        var anyMissing = false;
+    let issuesIdsInPullRequest = getIssuesIdsFromPullRequestProperties(pullRequest);
 
-        items.forEach(item => {
-          const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
+    if (emptyOrNull(issuesIdsInPullRequest)) {
+      // TODO: throw exception, require the PR to be edited (?)
+      // TODO: get issue ids from commit messages, too? (looks overcomplicated)
+      throw new Error("The pull request doesn't reference any issue.");
+    }
 
-          if (!issuesIds) {
-            anyMissing = true;
-            console.error(`Commit ${item.sha} with message "${item.commit.message}"
-                           does not refer any issue.`)
-          } else {
-            console.info(`ids: ${issuesIds}`)
-          }
-        });
+    if (issuesIdsInPullRequest == null)
+      throw new Error('Program flow error: issues ids must be present here.');
 
-        if (anyMissing) {
-          throw new Error("One or more commit messages don't refer any issue.");
-        }
-      })
+    // add comment to PR
+    await octokit.pulls.createComment({
+      owner,
+      repo,
+      body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
+      number: pullRequest.number,
+      commit_id: '',
+      path: ''
+    });
+
   } catch (error) {
     core.setFailed(error.message)
   }

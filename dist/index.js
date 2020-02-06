@@ -3491,13 +3491,36 @@ function requireValue(callback, hint) {
         throw new Error(`Missing value for ${hint}`);
     return value;
 }
-function getIssuesIdsFromCommitMessage(message) {
-    if (message.indexOf('#') == -1)
+function getIssuesIdsFromText(text) {
+    if (!text || text.indexOf('#') == -1)
         return null;
-    const match = message.match(/(#\d+)/g);
+    const match = text.match(/(#\d+)/g);
     if (!match)
         return null;
     return match;
+}
+function mergeArrays(...arrays) {
+    let values = null;
+    for (const array of arrays) {
+        if (array === null)
+            continue;
+        if (values == null)
+            values = [];
+        values = values.concat(array);
+    }
+    return values;
+}
+function distinct(array) {
+    return array.filter((item, index, self) => self.indexOf(item) === index);
+}
+function emptyOrNull(array) {
+    return array == null || array.length == 0;
+}
+function getIssuesIdsFromPullRequestProperties(pullRequest) {
+    if (!pullRequest) {
+        throw new NotAPullRequestError();
+    }
+    return mergeArrays(getIssuesIdsFromText(pullRequest.title), getIssuesIdsFromText(pullRequest.body));
 }
 function getPullRequestLabels(octokit, owner, repo, pull_number) {
     return __awaiter(this, void 0, void 0, function* () {
@@ -3510,6 +3533,7 @@ function getPullRequestLabels(octokit, owner, repo, pull_number) {
     });
 }
 // NB: the following function doesn't do what we thought it would do!
+// OBSOLETE, KEPT ONLY FOR REFERENCE
 function runAllChecks(octokit, owner, repo, suites) {
     return __awaiter(this, void 0, void 0, function* () {
         // console.log(`all_check_suites: ${JSON.stringify(suites, undefined, 2)}`);
@@ -3575,22 +3599,36 @@ function skipValidation(labels) {
     }
     return false;
 }
-function isChangeOfLabel(payload) {
-    return payload.action == 'labeled' || payload.action == 'unlabeled';
-}
-function handleChangeOfLabel(octokit, owner, repo) {
+function getIssueIdsFromCommitMessages(octokit, owner, repo, pull_number) {
     return __awaiter(this, void 0, void 0, function* () {
-        const ref = requireValue(() => { var _a; return (_a = github_1.context.payload.pull_request) === null || _a === void 0 ? void 0 : _a.head.sha; }, 'pr_head_sha');
-        const suitesForRef = yield octokit.checks.listSuitesForRef({
+        var issueIds = [];
+        // NB: paginate fetches all commits for the PR, so it handles
+        // the unlikely situation of a PR with more than 250 commits
+        yield octokit
+            .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
             owner,
             repo,
-            ref
+            pull_number
+        })
+            .then(items => {
+            items.forEach(item => {
+                const issuesIds = getIssuesIdsFromText(item.commit.message);
+                if (!issuesIds) {
+                    console.error(`Commit ${item.sha} with message "${item.commit.message}"
+                           does not refer any issue.`);
+                }
+            });
         });
-        // TODO: the following is the wrong strategy
-        // console.log('Forcing a re-check of previous checks');
-        // await runAllChecks(octokit, owner, repo, suitesForRef.data);
-        return;
+        return distinct(issueIds);
     });
+}
+function getPositiveCommentBody(distinctIssuesIds) {
+    if (!distinctIssuesIds.length)
+        throw new Error('Expected a populated array of issues ids.');
+    let emojis = ':sparkles: :cake: :sparkles:';
+    if (distinctIssuesIds.length == 1)
+        return `Great! The PR references this issue: ${distinctIssuesIds[0]} ${emojis}`;
+    return `Great! The PR references these issues: ${distinctIssuesIds.join(', ')} ${emojis}`;
 }
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -3599,7 +3637,7 @@ function run() {
             const owner = requireValue(() => { var _a, _b; return (_b = (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.owner) === null || _b === void 0 ? void 0 : _b.login; }, 'owner');
             const repo = requireValue(() => { var _a; return (_a = github_1.context.payload.repository) === null || _a === void 0 ? void 0 : _a.name; }, 'repository');
             // TODO:
-            // 1. look for issue ids in PR title and description
+            // 1. look for issue ids in PR title and body
             // 2. support by action configuration to look for issue ids in both comments and PR
             console.log(`context: ${JSON.stringify(github_1.context, null, 2)}\n-------`);
             const pullRequest = github_1.context.payload.pull_request;
@@ -3614,33 +3652,25 @@ function run() {
             // if the pull request has the skip-issue label, this check is skipped,
             const labels = yield getPullRequestLabels(octokit, owner, repo, pullRequest.number);
             if (skipValidation(labels)) {
-                console.log("Commit messages validation skipped by label (skip-issue)");
+                console.log("`Link to issue` validation skipped by label (skip-issue)");
                 return;
             }
-            // NB: paginate fetches all commits for the PR, so it handles
-            // the unlikely situation of a PR with more than 250 commits
-            yield octokit
-                .paginate('GET /repos/:owner/:repo/pulls/:pull_number/commits', {
+            let issuesIdsInPullRequest = getIssuesIdsFromPullRequestProperties(pullRequest);
+            if (emptyOrNull(issuesIdsInPullRequest)) {
+                // TODO: throw exception, require the PR to be edited (?)
+                // TODO: get issue ids from commit messages, too? (looks overcomplicated)
+                throw new Error("The pull request doesn't reference any issue.");
+            }
+            if (issuesIdsInPullRequest == null)
+                throw new Error('Program flow error: issues ids must be present here.');
+            // add comment to PR
+            yield octokit.pulls.createComment({
                 owner,
                 repo,
-                pull_number: pullRequest.number
-            })
-                .then(items => {
-                var anyMissing = false;
-                items.forEach(item => {
-                    const issuesIds = getIssuesIdsFromCommitMessage(item.commit.message);
-                    if (!issuesIds) {
-                        anyMissing = true;
-                        console.error(`Commit ${item.sha} with message "${item.commit.message}"
-                           does not refer any issue.`);
-                    }
-                    else {
-                        console.info(`ids: ${issuesIds}`);
-                    }
-                });
-                if (anyMissing) {
-                    throw new Error("One or more commit messages don't refer any issue.");
-                }
+                body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
+                number: pullRequest.number,
+                commit_id: '',
+                path: ''
             });
         }
         catch (error) {
