@@ -3530,7 +3530,9 @@ function getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest) {
             return values;
         if (idsInPullRequest == null)
             throw new Error('Expected a value');
-        for (const id in distinct(idsInPullRequest)) {
+        const uniqueIds = distinct(idsInPullRequest);
+        for (var i = 0; i < uniqueIds.length; i++) {
+            const id = uniqueIds[i];
             const numericId = Number(id.replace('#', ''));
             if (isNaN(numericId)) {
                 // NB: issue number is expected to be a string with leading # and followed by \d+
