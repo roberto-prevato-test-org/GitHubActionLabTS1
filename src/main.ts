@@ -268,15 +268,28 @@ async function run(): Promise<void> {
       throw new Error('Program flow error: issues ids must be present here.');
 
     // add comment to PR
+    /*
+    NB: this is a code comment!!
     await octokit.pulls.createComment({
       owner,
       repo,
       body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
       number: pullRequest.number,
-      commit_id: '',
+      commit_id: pullRequest.head.sha,
       path: ''
     });
+    */
+    const commentResponse = await octokit.request('POST /repos/:owner/:repo/pull/:pull_number/comments', {
+      owner,
+      repo,
+      data: {
+        body: getPositiveCommentBody(distinct(issuesIdsInPullRequest))
+      },
+      pull_number: pullRequest.number,
+    })
 
+    if (commentResponse.status >= 300)
+      throw new Error(`Comment response does not indicate success ${commentResponse.status}`);
   } catch (error) {
     core.setFailed(error.message)
   }

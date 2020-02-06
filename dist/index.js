@@ -3664,14 +3664,27 @@ function run() {
             if (issuesIdsInPullRequest == null)
                 throw new Error('Program flow error: issues ids must be present here.');
             // add comment to PR
-            yield octokit.pulls.createComment({
+            /*
+            NB: this is a code comment!!
+            await octokit.pulls.createComment({
+              owner,
+              repo,
+              body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
+              number: pullRequest.number,
+              commit_id: pullRequest.head.sha,
+              path: ''
+            });
+            */
+            const commentResponse = yield octokit.request('POST /repos/:owner/:repo/pull/:pull_number/comments', {
                 owner,
                 repo,
-                body: getPositiveCommentBody(distinct(issuesIdsInPullRequest)),
-                number: pullRequest.number,
-                commit_id: '',
-                path: ''
+                data: {
+                    body: getPositiveCommentBody(distinct(issuesIdsInPullRequest))
+                },
+                pull_number: pullRequest.number,
             });
+            if (commentResponse.status >= 300)
+                throw new Error(`Comment response does not indicate success ${commentResponse.status}`);
         }
         catch (error) {
             core.setFailed(error.message);
