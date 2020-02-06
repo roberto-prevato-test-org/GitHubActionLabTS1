@@ -88,10 +88,7 @@ async function getIssuesFromPullRequestProperties(
   if (idsInPullRequest == null)
     throw new Error('Expected a value');
 
-  const uniqueIds = distinct(idsInPullRequest);
-
-  for (var i = 0; i < uniqueIds.length; i++) {
-    const id = uniqueIds[i];
+  for (const id of distinct(idsInPullRequest)) {
     const numericId = Number(id.replace('#', ''));
 
     if (isNaN(numericId)) {
