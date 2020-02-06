@@ -239,7 +239,7 @@ function getPositiveCommentBody(issues: IssuesGetResponse[]): string {
     throw new Error('Expected a populated array of issues.');
 
   const emojis = ':sparkles: :cake: :sparkles:';
-  const distinctIssuesIds = distinct(issues.map(item => item.number));
+  const distinctIssuesIds = distinct(issues.map(item => `#${item.number}`));
 
   if (distinctIssuesIds.length == 1)
     return `Great! The PR references this issue: ${distinctIssuesIds[0]} ${emojis}`;
