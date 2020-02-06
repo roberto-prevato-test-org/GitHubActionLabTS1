@@ -3537,17 +3537,27 @@ function getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest) {
                 // if this happens, it's a program error
                 throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`);
             }
-            const response = yield octokit.issues.get({
-                owner,
-                repo,
-                issue_number: issueNumber
-            });
-            if (response.status == 404) {
-                // this is fine; not all ids must refer an issues
-                console.log(`An issue with id: '${id}' was not found.`);
+            let data = null;
+            try {
+                yield octokit.issues.get({
+                    owner,
+                    repo,
+                    issue_number: issueNumber
+                }).then(response => {
+                    data = response.data;
+                });
             }
-            else {
-                values.push(response.data);
+            catch (error) {
+                if (error.message == 'Not Found') {
+                    // this is fine; not all ids must refer an issues
+                    console.log(`An issue with id: '${id}' was not found.`);
+                }
+                else {
+                    throw error;
+                }
+            }
+            if (data) {
+                values.push(data);
             }
         }
         return values;
@@ -3610,9 +3620,9 @@ function skipValidation(labels) {
     }
     return false;
 }
-function getIssueIdsFromCommitMessages(octokit, owner, repo, pull_number) {
+function getIdsFromCommitMessages(octokit, owner, repo, pull_number) {
     return __awaiter(this, void 0, void 0, function* () {
-        var issueIds = [];
+        var ids = [];
         // NB: paginate fetches all commits for the PR, so it handles
         // the unlikely situation of a PR with more than 250 commits
         yield octokit
@@ -3623,14 +3633,13 @@ function getIssueIdsFromCommitMessages(octokit, owner, repo, pull_number) {
         })
             .then(items => {
             items.forEach(item => {
-                const issuesIds = getIdsFromText(item.commit.message);
-                if (!issuesIds) {
-                    console.error(`Commit ${item.sha} with message "${item.commit.message}"
-                           does not refer any issue.`);
+                const commitIds = getIdsFromText(item.commit.message);
+                if (commitIds) {
+                    ids = ids.concat(commitIds);
                 }
             });
         });
-        return distinct(issueIds);
+        return distinct(ids);
     });
 }
 function getPositiveCommentBody(issues) {

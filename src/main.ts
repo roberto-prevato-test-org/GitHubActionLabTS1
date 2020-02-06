@@ -97,17 +97,26 @@ async function getIssuesFromPullRequestProperties(
       throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`)
     }
 
-    const response = await octokit.issues.get({
-      owner,
-      repo,
-      issue_number: issueNumber
-    });
+    let data: (IssuesGetResponse | null) = null;
+    try {
+      await octokit.issues.get({
+        owner,
+        repo,
+        issue_number: issueNumber
+      }).then(response => {
+        data = response.data;
+      });
+    } catch (error) {
+      if (error.message == 'Not Found') {
+        // this is fine; not all ids must refer an issues
+        console.log(`An issue with id: '${id}' was not found.`);
+      } else {
+        throw error;
+      }
+    }
 
-    if (response.status == 404) {
-      // this is fine; not all ids must refer an issues
-      console.log(`An issue with id: '${id}' was not found.`);
-    } else {
-      values.push(response.data);
+    if (data) {
+      values.push(data);
     }
   }
 
@@ -192,13 +201,13 @@ function skipValidation(labels: PullsGetResponseLabelsItem[]): boolean {
 }
 
 
-async function getIssueIdsFromCommitMessages(
+async function getIdsFromCommitMessages(
   octokit: GitHub,
   owner: string,
   repo: string,
   pull_number: number
 ): Promise<string[]> {
-  var issueIds: string[] = [];
+  var ids: string[] = [];
 
   // NB: paginate fetches all commits for the PR, so it handles
   // the unlikely situation of a PR with more than 250 commits
@@ -212,16 +221,15 @@ async function getIssueIdsFromCommitMessages(
     )
     .then(items => {
       items.forEach(item => {
-        const issuesIds = getIdsFromText(item.commit.message);
+        const commitIds = getIdsFromText(item.commit.message);
 
-        if (!issuesIds) {
-          console.error(`Commit ${item.sha} with message "${item.commit.message}"
-                           does not refer any issue.`)
+        if (commitIds) {
+          ids = ids.concat(commitIds);
         }
       });
     })
 
-  return distinct(issueIds);
+  return distinct(ids);
 }
 
 
