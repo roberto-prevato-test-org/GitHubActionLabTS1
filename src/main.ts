@@ -89,22 +89,22 @@ async function getIssuesFromPullRequestProperties(
     throw new Error('Expected a value');
 
   for (const id in distinct(idsInPullRequest)) {
-    const issueNumber = Number(id.replace('#', ''));
+    const numericId = Number(id.replace('#', ''));
 
-    if (isNaN(issueNumber)) {
+    if (isNaN(numericId)) {
       // NB: issue number is expected to be a string with leading # and followed by \d+
       // if this happens, it's a program error
       throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`)
     }
 
-    console.info("ids: " + JSON.stringify(idsInPullRequest), null, 2);
+    console.info(id, numericId);
 
     let data: (IssuesGetResponse | null) = null;
     try {
       await octokit.issues.get({
         owner,
         repo,
-        issue_number: issueNumber
+        issue_number: numericId
       }).then(response => {
         data = response.data;
       });
