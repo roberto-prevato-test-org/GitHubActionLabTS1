@@ -3537,6 +3537,7 @@ function getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest) {
                 // if this happens, it's a program error
                 throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`);
             }
+            console.info("ids: " + JSON.stringify(idsInPullRequest), null, 2);
             let data = null;
             try {
                 yield octokit.issues.get({
@@ -3548,7 +3549,7 @@ function getIssuesFromPullRequestProperties(octokit, owner, repo, pullRequest) {
                 });
             }
             catch (error) {
-                if (error['status'] == 404) {
+                if (error['status'] === 404) {
                     console.log(`An issue with id: '${id}' was not found.`);
                 }
                 else {

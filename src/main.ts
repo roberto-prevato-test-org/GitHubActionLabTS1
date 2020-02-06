@@ -97,6 +97,8 @@ async function getIssuesFromPullRequestProperties(
       throw new Error(`Invalid id: ${id}; cannot parse as number. Expected #\d+`)
     }
 
+    console.info("ids: " + JSON.stringify(idsInPullRequest), null, 2);
+
     let data: (IssuesGetResponse | null) = null;
     try {
       await octokit.issues.get({
@@ -107,7 +109,7 @@ async function getIssuesFromPullRequestProperties(
         data = response.data;
       });
     } catch (error) {
-      if (error['status'] == 404) {
+      if (error['status'] === 404) {
         console.log(`An issue with id: '${id}' was not found.`);
       } else {
         throw error;
